@@ -53,11 +53,11 @@ def main():
     accommodation_letter_template = AcceptanceLetterGenerator(base_dir / 'AccommodationLetterTemplate.docx')
     grant_agreement_template = GrantAgreementGenerator(base_dir / 'GrantAgreementTemplate.docx')
 
-    template_reader = pd.read_excel(nominations, sheet_name="Sheet1")
-    template_reader['StartDate'] = pd.to_datetime(template_reader['StartDate']).dt.strftime('%d.%m.%Y')
-    template_reader['EndDate'] = pd.to_datetime(template_reader['EndDate']).dt.strftime('%d.%m.%Y')
+    nominations_reader = pd.read_excel(nominations, sheet_name="Sheet1")
+    nominations_reader['StartDate'] = pd.to_datetime(nominations_reader['StartDate']).dt.strftime('%d.%m.%Y')
+    nominations_reader['EndDate'] = pd.to_datetime(nominations_reader['EndDate']).dt.strftime('%d.%m.%Y')
 
-    for record in template_reader.to_dict(orient="records"):
+    for record in nominations_reader.to_dict(orient="records"):
         student_folder = output_dir / f"{record['FullName']}"
         student_folder.mkdir(exist_ok=True)
 
