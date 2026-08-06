@@ -1,8 +1,17 @@
-import datetime
 import sys
 from pathlib import Path
 import pandas as pd
 from docxtpl import DocxTemplate
+from pathvalidate import sanitize_filename
+from tkinter import *
+
+window = Tk()
+window.geometry("420x420")
+window.title("EDG")
+icon = PhotoImage(file='logo.png')
+window.iconphoto(True, icon)
+window.config(background="black")
+window.mainloop()
 
 base_dir = Path(__file__).parent
 
@@ -18,52 +27,65 @@ class AcceptanceLetterGenerator:
     def __init__(self, template_path):
         self.template_path = template_path       
 
-    def generate(self, record, template_path, student_folder):    
-        doc = DocxTemplate(template_path)
+    def generate(self, record, student_folder):    
+        doc = DocxTemplate(self.template_path)
         doc.render(record)
         file_name = f"{record['FullName']}'s Acceptance Letter.docx"
-        doc.save(student_folder / file_name)
+        valid_file_name = sanitize_filename(file_name)
+        doc.save(student_folder / valid_file_name)
 
 class AccommodationLetterGenerator:
     def __init__(self, template_path):
         self.template_path = template_path
 
-    def generate(self, record, template_path, student_folder):    
-        doc = DocxTemplate(template_path)
+    def generate(self, record, student_folder):    
+        doc = DocxTemplate(self.template_path)
         doc.render(record)
         file_name = f"{record['FullName']}'s Accommodation Letter.docx"
-        doc.save(student_folder / file_name)
+        valid_file_name = sanitize_filename(file_name)
+        doc.save(student_folder / valid_file_name)
 
 class GrantAgreementGenerator:
     def __init__(self, template_path):
         self.template_path = template_path
 
-    def generate(self, record, template_path, student_folder):    
-        doc = DocxTemplate(template_path)
+    def generate(self, record, student_folder):    
+        doc = DocxTemplate(self.template_path)
         doc.render(record)
         file_name = f"{record['FullName']}'s Grant Agreement.docx"
-        doc.save(student_folder / file_name)
-
+        valid_file_name = sanitize_filename(file_name)
+        doc.save(student_folder / valid_file_name)
 
 def main():
-    if not nominations.exists:
+    if not nominations.exists():
         return f"Nominations does not exist{nominations.name}"
 
     acceptance_letter_template = AcceptanceLetterGenerator(base_dir / 'AcceptanceLetterTemplate.docx')
-    accommodation_letter_template = AcceptanceLetterGenerator(base_dir / 'AccommodationLetterTemplate.docx')
+    accommodation_letter_template = AccommodationLetterGenerator(base_dir / 'AccommodationLetterTemplate.docx')
     grant_agreement_template = GrantAgreementGenerator(base_dir / 'GrantAgreementTemplate.docx')
 
     nominations_reader = pd.read_excel(nominations, sheet_name="Sheet1")
+    nominations_reader = nominations_reader.dropna(how='all')
     nominations_reader['StartDate'] = pd.to_datetime(nominations_reader['StartDate']).dt.strftime('%d.%m.%Y')
     nominations_reader['EndDate'] = pd.to_datetime(nominations_reader['EndDate']).dt.strftime('%d.%m.%Y')
 
     for record in nominations_reader.to_dict(orient="records"):
-        student_folder = output_dir / f"{record['FullName']}"
-        student_folder.mkdir(exist_ok=True)
+        try:
+            full_name = str(record.get('FullName') or 'Unknown').strip() or 'Unknown'
+            country = str(record.get('Country') or 'Unknown').strip() or 'Unknown'
+            valid_full_name = sanitize_filename(full_name)
+            valid_country = sanitize_filename(country)
+            student_folder = output_dir / valid_country / valid_full_name
+            student_folder.mkdir(parents=True, exist_ok=True)
+        
+            acceptance_letter_template.generate(record, student_folder)
+            accommodation_letter_template.generate(record, student_folder)
+            grant_agreement_template.generate(record, student_folder)
 
-        acceptance_letter_template.generate(record, acceptance_letter_template, student_folder)
-        accommodation_letter_template.generate(record, accommodation_letter_template, student_folder)
-        grant_agreement_template.generate(record, grant_agreement_template, student_folder)
-
+        except Exception as e:
+            with open(base_dir / "errors.log", "a", encoding="utf-8") as f:
+                f.write(f"Row: {record} -> Error: {e}\n")
+            continue
+        
 if __name__ == "__main__":
-    main()        
+    main()
