@@ -5,16 +5,22 @@ from docxtpl import DocxTemplate
 from pathvalidate import sanitize_filename
 import tkinter as tk
 
-window = tk.Tk()
-
-window.geometry("1000x1000")
-window.title("EDG")
-window.iconbitmap('logo.ico')
-window.config(background="black")
-
-window.mainloop()
-
 base_dir = Path(__file__).parent
+
+root = tk.Tk()
+
+root.geometry('250x250')
+root.title('Erasmus Document Generator')
+root.iconbitmap('logo.ico')
+root.config(background='white')
+
+label = tk.Label(root, text='You want to save some time?', 
+                 font=('Plus Jakarta Sans', 12, 'bold'), 
+                 fg='#007FC7', 
+                 bg='#FFED00')
+label.pack()
+
+root.mainloop()
 
 if getattr(sys, 'frozen', False):
     base_dir = Path(sys.executable).parent
@@ -87,16 +93,6 @@ def main():
             with open(base_dir / "errors.log", "a", encoding="utf-8") as f:
                 f.write(f"Row: {record} -> Error: {e}\n")
             continue
-
-
-        root = tk.Tk()
-
-        root.geometry("1000x1000")
-        root.title("EDG")
-        root.iconbitmap('logo.ico')
-        root.config(background="black")
-
-        root.mainloop()
         
 if __name__ == "__main__":
     main()
