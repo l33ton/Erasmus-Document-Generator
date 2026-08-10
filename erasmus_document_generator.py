@@ -1,4 +1,5 @@
 import os
+import tempfile
 import sys
 from pathlib import Path
 import pandas as pd
@@ -9,11 +10,18 @@ from pathvalidate import sanitize_filename
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import tkinter.ttk as ttk
-
+import hashlib
 
 CURRENT_VERSION = 'v1.0.0'
 GITHUB_USERNAME = 'l33ton'
 GITHUB_REPO = 'Erasmus-Document-Generator'
+
+def calculate_sha256(file_path):
+    sha256_hash = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            sha256_hash.update(chunk)
+    return sha256_hash.hexdigest()
 
 def check_for_updates():
 
@@ -26,36 +34,49 @@ def check_for_updates():
 
             if latest_version != CURRENT_VERSION:
                 answer = messagebox.askyesno(
-                    'There is a new version:',
+                    'There is a new version',
                     f'We found a new version {latest_version} you are using {CURRENT_VERSION}. \nDo you want to download it?')
                 
                 if answer:
                     assets = latest_release.get('assets', [])
                     download_url = None
+                    checksum_url = None
 
                     for asset in assets:
                         if asset['name'].endswith('.exe'):
                             download_url = asset['browser_download_url']
+                        elif asset['name'].endswith('.sha256'):
+                            checksum_url = asset['browser_download_url']
 
-                    if download_url:
-                        status_label.config(text='Installing the new version', foreground='#003399')     
-                        root.update()   
-
-                        temp_setup = Path(os.getenv('TEMP')) / 'Update_Setup.exe'
-                        exe_data = requests.get(download_url).content
-
-                        with open(temp_setup, "wb") as f:
-                            f.write(exe_data)
-
-                        subprocess.Popen([str(temp_setup)])
-                        root.destroy()
-                        sys.exit()
-                    else: 
+                    if not download_url:
                         messagebox.showwarning('Error', 'No .exe file was found in the latest version on GitHub.')
+                        return
+                    if not checksum_url:
+                        messagebox.showwarning('Error', 'Missing .sha256 checksum file for the update.')
+                        return
+                    status_label.config(text='Installing the new version', foreground='#003399')
+                    root.update()
+
+                    temp_setup = Path(tempfile.gettempdir()) / 'Update_Setup.exe'
+                    exe_data = requests.get(download_url, timeout=15).content
+                    expected_hash = requests.get(checksum_url, timeout=10).text.strip().split()[0].lower()  
+                          
+                    with open(temp_setup, "wb") as f:
+                        f.write(exe_data)
+
+                    actual_hash = calculate_sha256(temp_setup)
+
+                    if actual_hash != expected_hash:
+                        temp_setup.unlink(missing_ok=True)
+                        messagebox.showerror('Security Error', 'The file failed verification and was not installed.')
+                        return
+
+                    subprocess.Popen([str(temp_setup)])
+                    root.destroy()
+                    sys.exit()
+
     except Exception as e:
         print(f"Check for update failed: {e}")                
-
-base_dir = Path(__file__).parent
 
 if getattr(sys, 'frozen', False):
     base_dir = Path(sys.executable).parent
@@ -65,38 +86,17 @@ else:
 nominations = base_dir / "Erasmus_Nominations_Data.xlsx"
 output_dir = base_dir / "generated_letters"
 
-class AcceptanceLetterGenerator:
-    def __init__(self, template_path):
-        self.template_path = template_path       
-
-    def generate(self, record, student_folder):    
-        doc = DocxTemplate(self.template_path)
-        doc.render(record)
-        file_name = f"{record['FullName']}'s Acceptance Letter.docx"
-        valid_file_name = sanitize_filename(file_name)
-        doc.save(student_folder / valid_file_name)
-
-class AccommodationLetterGenerator:
-    def __init__(self, template_path):
+class LetterGenerator:
+    def __init__(self, template_path, suffix):
         self.template_path = template_path
+        self.suffix = suffix
 
-    def generate(self, record, student_folder):    
+    def generate(self, record, student_folder):
         doc = DocxTemplate(self.template_path)
         doc.render(record)
-        file_name = f"{record['FullName']}'s Accommodation Letter.docx"
-        valid_file_name = sanitize_filename(file_name)
-        doc.save(student_folder / valid_file_name)
+        file_name = f"{record['FullName']}'s {self.suffix}.docx"
+        doc.save(student_folder / sanitize_filename(file_name))
 
-class GrantAgreementGenerator:
-    def __init__(self, template_path):
-        self.template_path = template_path
-
-    def generate(self, record, student_folder):    
-        doc = DocxTemplate(self.template_path)
-        doc.render(record)
-        file_name = f"{record['FullName']}'s Grant Agreement.docx"
-        valid_file_name = sanitize_filename(file_name)
-        doc.save(student_folder / valid_file_name)
 def select_file(target_var, title, file_types):
     path = filedialog.askopenfilename(title=title, filetypes=file_types)
     if path:
@@ -118,7 +118,6 @@ def create_file_row(parent, row, label_text, var, browse_func):
     btn.grid(row=row, column=2, padx=5, pady=5)
 
 def start_generation_proccess():
-    print("--- Generate is clicked ---")
     nominations_path = Path(path_noms.get())
     output_dir = Path(path_output.get())
     acs_tpl_path = path_acs.get()
@@ -141,12 +140,12 @@ def start_generation_proccess():
     root.update()
 
     try:
-        acceptance_letter_template = AcceptanceLetterGenerator(acs_tpl_path)
-        accommodation_letter_template = AccommodationLetterGenerator(acm_tpl_path)
-        grant_agreement_template = GrantAgreementGenerator(ga_tpl_path)
+        acceptance_letter_template = LetterGenerator(acs_tpl_path, 'Acceptance Letter')
+        accommodation_letter_template = LetterGenerator(acm_tpl_path, 'Accommodation Letter')
+        grant_agreement_template = LetterGenerator(ga_tpl_path, 'Grant Agreement')
 
-        nominations_reader = pd.read_excel(nominations_path, sheet_name="Sheet1")
-        nominations_reader = nominations_reader.dropna(how='all')
+        nominations_reader = pd.read_excel(nominations_path, sheet_name=0)
+        nominations_reader = nominations_reader.dropna(how='all').fillna('')
 
         if 'StartDate' in nominations_reader:
             nominations_reader['StartDate'] = pd.to_datetime(nominations_reader['StartDate']).dt.strftime('%d.%m.%Y')
