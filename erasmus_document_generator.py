@@ -1,11 +1,59 @@
+import os
 import sys
 from pathlib import Path
 import pandas as pd
+import subprocess
+import requests
 from docxtpl import DocxTemplate
 from pathvalidate import sanitize_filename
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import tkinter.ttk as ttk
+
+
+CURRENT_VERSION = 'v1.0.0'
+GITHUB_USERNAME = 'l33ton'
+GITHUB_REPO = 'Erasmus-Document-Generator'
+
+def check_for_updates():
+
+    try:
+        api_url = f'https://api.github.com/repos/{GITHUB_USERNAME}/{GITHUB_REPO}/releases/latest'
+        response = requests.get(api_url, timeout=3)
+        if response.status_code == 200:
+            latest_release = response.json()
+            latest_version = latest_release.get('tag_name')
+
+            if latest_version != CURRENT_VERSION:
+                answer = messagebox.askyesno(
+                    'There is a new version:',
+                    f'We found a new version {latest_version} you are using {CURRENT_VERSION}. \nDo you want to download it?')
+                
+                if answer:
+                    assets = latest_release.get('assets', [])
+                    download_url = None
+
+                    for asset in assets:
+                        if asset['name'].endswith('.exe'):
+                            download_url = asset['browser_download_url']
+
+                    if download_url:
+                        status_label.config(text='Installing the new version', foreground='#003399')     
+                        root.update()   
+
+                        temp_setup = Path(os.getenv('TEMP')) / 'Update_Setup.exe'
+                        exe_data = requests.get(download_url).content
+
+                        with open(temp_setup, "wb") as f:
+                            f.write(exe_data)
+
+                        subprocess.Popen([str(temp_setup)])
+                        root.destroy()
+                        sys.exit()
+                    else: 
+                        messagebox.showwarning('Error', 'No .exe file was found in the latest version on GitHub.')
+    except Exception as e:
+        print(f"Check for update failed: {e}")                
 
 base_dir = Path(__file__).parent
 
@@ -130,7 +178,7 @@ def start_generation_proccess():
                     f.write(f"Row: {record} -> Error: {e}\n")
                     continue
         status_label.config(text='All documents generated successfully!', foreground='green')
-        messagebox.showinfo('Success', f'Done! Documents generated for {total_participants} students.') 
+        messagebox.showinfo('Success', f'Done! Documents generated for {total_participants} participants.') 
 
     except Exception as e:
         status_label.config(text='Error with processing!', foreground='red')
@@ -196,15 +244,17 @@ status_label.pack(pady=5)
 generate_button = ttk.Button(progress_frame, text='Generate', command=start_generation_proccess)
 generate_button.pack(pady=10)
 
-if (base_dir / "AcceptanceLetterTemplate.docx").exists():
+if (base_dir / 'AcceptanceLetterTemplate.docx').exists():
     path_acs.set(str(base_dir / "AcceptanceLetterTemplate.docx"))
-if (base_dir / "AccommodationLetterTemplate.docx").exists():
+if (base_dir / 'AccommodationLetterTemplate.docx').exists():
     path_acm.set(str(base_dir / "AccommodationLetterTemplate.docx"))
-if (base_dir / "GrantAgreementTemplate.docx").exists():
+if (base_dir / 'GrantAgreementTemplate.docx').exists():
     path_ga.set(str(base_dir / "GrantAgreementTemplate.docx"))
-if (base_dir / "Erasmus_Nominations_Data.xlsx").exists():
+if (base_dir / 'Erasmus_Nominations_Data.xlsx').exists():
     path_noms.set(str(base_dir / "Erasmus_Nominations_Data.xlsx"))
-path_output.set(str(base_dir / "generated_letters"))
+if (base_dir / 'Generated_Documents').exists():
+    path_output.set(str(base_dir / 'Generated_Documents'))
 
 if __name__ == "__main__":
+        root.after(1000, check_for_updates)
         root.mainloop()
