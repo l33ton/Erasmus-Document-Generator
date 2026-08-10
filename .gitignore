@@ -1,3 +1,39 @@
-.venv
-dist
-.spec
+# PyInstaller & Build outputs
+build/
+dist/
+*.spec
+
+# Inno Setup Output
+Output/
+*_Setup.exe
+Update_Setup.exe
+
+# Output Directories & User Generated Data
+generated_letter/
+generated_letters/
+errors.log
+
+# Python Cache & Executables
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyd.cache
+.pytest_cache/
+
+# Excel / Word temporary files
+~$*.xlsx
+~$*.docx
+
+# Environment & IDEs
+.venv/
+env/
+venv/
+ENV/
+.vscode/
+.idea/
+
+# Windows OS metadata
+Thumbs.db
+ehthumbs.db
+Desktop.ini

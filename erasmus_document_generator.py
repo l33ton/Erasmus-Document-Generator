@@ -252,9 +252,8 @@ if (base_dir / 'GrantAgreementTemplate.docx').exists():
     path_ga.set(str(base_dir / "GrantAgreementTemplate.docx"))
 if (base_dir / 'Erasmus_Nominations_Data.xlsx').exists():
     path_noms.set(str(base_dir / "Erasmus_Nominations_Data.xlsx"))
-if (base_dir / 'Generated_Documents').exists():
-    path_output.set(str(base_dir / 'Generated_Documents'))
+path_output.set(str(base_dir / 'Generated_Documents'))
 
 if __name__ == "__main__":
-        root.after(1000, check_for_updates)
-        root.mainloop()
+    root.after(1000, check_for_updates)
+    root.mainloop()
