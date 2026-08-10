@@ -117,7 +117,7 @@ def create_file_row(parent, row, label_text, var, browse_func):
     btn = ttk.Button(parent, text='Browse', command=browse_func)
     btn.grid(row=row, column=2, padx=5, pady=5)
 
-def start_generation_proccess():
+def start_generation_process():
     nominations_path = Path(path_noms.get())
     output_dir = Path(path_output.get())
     acs_tpl_path = path_acs.get()
@@ -237,10 +237,10 @@ progress_frame = ttk.Labelframe(tab_main, text='Progress and Button')
 progress_frame.columnconfigure(1, weight=1)
 progress_frame.pack(fill='x', padx=15, pady=10)
 
-status_label = ttk.Label(progress_frame, text='Ready to proccess..')
+status_label = ttk.Label(progress_frame, text='Ready to process..')
 status_label.pack(pady=5)
 
-generate_button = ttk.Button(progress_frame, text='Generate', command=start_generation_proccess)
+generate_button = ttk.Button(progress_frame, text='Generate', command=start_generation_process)
 generate_button.pack(pady=10)
 
 if (base_dir / 'AcceptanceLetterTemplate.docx').exists():
