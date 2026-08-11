@@ -97,6 +97,21 @@ class LetterGenerator:
         file_name = f"{record['FullName']}'s {self.suffix}.docx"
         doc.save(student_folder / sanitize_filename(file_name))
 
+def validate_record(record):
+    required_fields = ['FullName', 'Country', 'PassportNumber', 'StartDate', 'EndDate']
+    missing_fields = []
+
+    for field in required_fields:
+        value = record.get(field)
+
+        if value is None or str(value).strip() == '':
+            missing_fields.append(field)
+
+    if missing_fields:
+        raise ValueError(
+            f"Missing value(s): {', '.join(missing_fields)}"
+        )
+
 def select_file(target_var, title, file_types):
     path = filedialog.askopenfilename(title=title, filetypes=file_types)
     if path:
@@ -132,6 +147,7 @@ def start_generation_process():
     if not output_dir.exists():
         messagebox.showwarning('Error', 'Please choose a valid directory')
         return
+    
     if not (acs_tpl_path and acm_tpl_path and ga_tpl_path):
         messagebox.showwarning('Error', 'Please provide all the 3 templates')
         return
@@ -146,7 +162,7 @@ def start_generation_process():
 
         nominations_reader = pd.read_excel(nominations_path, sheet_name=0)
         nominations_reader = nominations_reader.dropna(how='all').fillna('')
-
+                
         if 'StartDate' in nominations_reader:
             nominations_reader['StartDate'] = pd.to_datetime(nominations_reader['StartDate']).dt.strftime('%d.%m.%Y')
         if 'EndDate' in nominations_reader:
@@ -154,17 +170,24 @@ def start_generation_process():
 
         records = nominations_reader.to_dict(orient='records')
         total_participants = len(records)
+        successfull = []
+        failed = []
+
         for idx, record in enumerate(records, 1):
-              
-            full_name = str(record.get('FullName') or 'Unknown').strip() or 'Unknown'
+
+            validate_record(nominations_reader)
+            full_name = str(record.get('FullName')).strip()
+            valid_full_name = sanitize_filename(full_name)    
             country = str(record.get('Country') or 'Unknown').strip() or 'Unknown'
-            valid_full_name = sanitize_filename(full_name)
             valid_country = sanitize_filename(country)
 
-            status_label.config(text=f'Processing [{idx}/{total_participants}]: {valid_full_name} ({valid_country})')
-            root.update()
+            try:                                  
+                if not full_name:
+                    raise ValueError('Missing Full Name')
+                
+                status_label.config(text=f'Processing [{idx}/{total_participants}]: {valid_full_name} ({valid_country})')
+                root.update()
 
-            try:    
                 student_folder = output_dir / valid_country / valid_full_name
                 student_folder.mkdir(parents=True, exist_ok=True)
         
@@ -172,12 +195,22 @@ def start_generation_process():
                 accommodation_letter_template.generate(record, student_folder)
                 grant_agreement_template.generate(record, student_folder)
 
-            except Exception as e:
-                 with open(base_dir / "errors.log", "a", encoding="utf-8") as f:
-                    f.write(f"Row: {record} -> Error: {e}\n")
-                    continue
-        status_label.config(text='All documents generated successfully!', foreground='green')
-        messagebox.showinfo('Success', f'Done! Documents generated for {total_participants} participants.') 
+                successfull.append(valid_full_name)
+
+            except Exception as e:                 
+                 failed.append({'name': full_name if full_name else 'Unknown', 'row': idx, 'error': str(e)})                                
+                 continue
+                
+        if not failed:
+            status_label.config(text='All documents generated successfully!', foreground='green')
+            messagebox.showinfo('Success', f'Done! Documents generated for {total_participants} participants.') 
+        else:
+            status_label.config(text='Documents generated with errors.', foreground='orange')
+            failed_details = '\n'.join(
+            f'Row {item['row']}: {item['name']} - {item['error']}'
+            for item in failed)
+                                
+            messagebox.showwarning('Completed with errors', f'Generated successfully: {len(successfull)}\n' f'Failed: {len(failed)}\n\n' f'Failed Participants: \n{failed_details}')                                
 
     except Exception as e:
         status_label.config(text='Error with processing!', foreground='red')
