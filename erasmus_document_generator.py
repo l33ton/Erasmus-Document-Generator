@@ -174,14 +174,14 @@ def start_generation_process():
         failed = []
 
         for idx, record in enumerate(records, 1):
-
-            validate_record(nominations_reader)
+            
             full_name = str(record.get('FullName')).strip()
             valid_full_name = sanitize_filename(full_name)    
             country = str(record.get('Country') or 'Unknown').strip() or 'Unknown'
             valid_country = sanitize_filename(country)
 
-            try:                                  
+            try:     
+                validate_record(record)                             
                 if not full_name:
                     raise ValueError('Missing Full Name')
                 
