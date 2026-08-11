@@ -97,21 +97,6 @@ class LetterGenerator:
         file_name = f"{record['FullName']}'s {self.suffix}.docx"
         doc.save(student_folder / sanitize_filename(file_name))
 
-def validate_record(record):
-    required_fields = ['FullName', 'Country', 'PassportNumber', 'StartDate', 'EndDate']
-    missing_fields = []
-
-    for field in required_fields:
-        value = record.get(field)
-
-        if value is None or str(value).strip() == '':
-            missing_fields.append(field)
-
-    if missing_fields:
-        raise ValueError(
-            f"Missing value(s): {', '.join(missing_fields)}"
-        )
-
 def select_file(target_var, title, file_types):
     path = filedialog.askopenfilename(title=title, filetypes=file_types)
     if path:
@@ -180,11 +165,7 @@ def start_generation_process():
             country = str(record.get('Country') or 'Unknown').strip() or 'Unknown'
             valid_country = sanitize_filename(country)
 
-            try:     
-                validate_record(record)                             
-                if not full_name:
-                    raise ValueError('Missing Full Name')
-                
+            try:                                 
                 status_label.config(text=f'Processing [{idx}/{total_participants}]: {valid_full_name} ({valid_country})')
                 root.update()
 
@@ -198,7 +179,7 @@ def start_generation_process():
                 successfull.append(valid_full_name)
 
             except Exception as e:                 
-                 failed.append({'name': full_name if full_name else 'Unknown', 'row': idx, 'error': str(e)})                                
+                 failed.append({'name': full_name, 'row': idx, 'error': str(e)})                                
                  continue
                 
         if not failed:
