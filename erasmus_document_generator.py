@@ -222,7 +222,7 @@ def convert_all_to_pdf(root_folder: Path):
             try:
                 doc = word.Documents.Open(str(docx_file))
                 pdf_path = docx_file.with_suffix('.pdf')
-                doc.SaveAs(str(pdf_path), FileFormat=17)  # wdFormatPDF
+                doc.SaveAs(str(pdf_path), FileFormat=17)
                 doc.Close()
                 converted.append(docx_file.name)
             except Exception as e:
