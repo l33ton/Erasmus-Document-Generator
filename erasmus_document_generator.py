@@ -148,8 +148,7 @@ def start_generation_process():
         grant_agreement_template = LetterGenerator(ga_tpl_path, 'Grant Agreement')
 
         nominations_reader = pd.read_excel(nominations_path, sheet_name=0)
-        nominations_reader = nominations_reader.dropna(how='all').fillna('')
-                
+                   
         if 'StartDate' in nominations_reader:
             nominations_reader['StartDate'] = pd.to_datetime(nominations_reader['StartDate']).dt.strftime('%d.%m.%Y')
         if 'EndDate' in nominations_reader:
