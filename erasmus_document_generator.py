@@ -11,6 +11,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import tkinter.ttk as ttk
 import hashlib
+from docx2pdf import convert
+
 
 CURRENT_VERSION = 'v1.0.0'
 GITHUB_USERNAME = 'l33ton'
@@ -157,6 +159,8 @@ def start_generation_process():
         total_participants = len(records)
         successfull = []
         failed = []
+        pdf_success = []
+        pdf_failed = []
 
         for idx, record in enumerate(records, 1):
             
@@ -178,6 +182,13 @@ def start_generation_process():
 
                 successfull.append(valid_full_name)
 
+                try:
+                    convert(str(student_folder))
+                    pdf_success.append(valid_full_name)    
+                except Exception as e:
+                        pdf_failed.append({'name': full_name, 'row': idx, 'error': str(e)})                                
+
+                        continue
             except Exception as e:                 
                  failed.append({'name': full_name, 'row': idx, 'error': str(e)})                                
                  continue
@@ -270,5 +281,3 @@ path_output.set(str(base_dir / 'generated_documents'))
 if __name__ == "__main__":
     root.after(1000, check_for_updates)
     root.mainloop()
-
-    # 
