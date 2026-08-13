@@ -1,4 +1,3 @@
-import os
 import tempfile
 import sys
 from pathlib import Path
@@ -11,7 +10,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import tkinter.ttk as ttk
 import hashlib
-from docx2pdf import convert
+import win32com.client
+import pythoncom
 
 
 CURRENT_VERSION = 'v1.0.0'
@@ -120,6 +120,7 @@ def create_file_row(parent, row, label_text, var, browse_func):
     btn.grid(row=row, column=2, padx=5, pady=5)
 
 def start_generation_process():
+    global documents_generated
     nominations_path = Path(path_noms.get())
     output_dir = Path(path_output.get())
     acs_tpl_path = path_acs.get()
@@ -139,10 +140,13 @@ def start_generation_process():
         messagebox.showwarning('Error', 'Please provide all the 3 templates')
         return
 
-    status_label.config(text='Loading the templates', foreground='blue')
+    generate_button.config(state='disabled')
+    convert_button.config(state='disabled')
     root.update()
 
     try:
+        status_label.config(text='Loading the templates', foreground='blue')
+        root.update()
         acceptance_letter_template = LetterGenerator(acs_tpl_path, 'Acceptance Letter')
         accommodation_letter_template = LetterGenerator(acm_tpl_path, 'Accommodation Letter')
         grant_agreement_template = LetterGenerator(ga_tpl_path, 'Grant Agreement')
@@ -158,8 +162,6 @@ def start_generation_process():
         total_participants = len(records)
         successfull = []
         failed = []
-        pdf_success = []
-        pdf_failed = []
 
         for idx, record in enumerate(records, 1):
             
@@ -180,33 +182,96 @@ def start_generation_process():
                 grant_agreement_template.generate(record, student_folder)
 
                 successfull.append(valid_full_name)
-
-                try:
-                    convert(str(student_folder))
-                    pdf_success.append(valid_full_name)    
-                except Exception as e:
-                        pdf_failed.append({'name': full_name, 'row': idx, 'error': str(e)})                                
-
-                        continue
+                                        
             except Exception as e:                 
                  failed.append({'name': full_name, 'row': idx, 'error': str(e)})                                
                  continue
-                
+            
+        if successfull:
+            documents_generated = True
+            convert_button.config(state='normal')    
+
         if not failed:
             status_label.config(text='All documents generated successfully!', foreground='green')
             messagebox.showinfo('Success', f'Done! Documents generated for {total_participants} participants.') 
         else:
             status_label.config(text='Documents generated with errors.', foreground='orange')
             failed_details = '\n'.join(
-            f'Row {item['row']}: {item['name']} - {item['error']}'
+            f"Row {item['row']}: {item['name']} - {item['error']}"
             for item in failed)
                                 
             messagebox.showwarning('Completed with errors', f'Generated successfully: {len(successfull)}\n' f'Failed: {len(failed)}\n\n' f'Failed Participants: \n{failed_details}')                                
-
+            
     except Exception as e:
         status_label.config(text='Error with processing!', foreground='red')
         messagebox.showerror('Error', f'An unexpected error occurred:\n{str(e)}')
 
+    finally:
+        generate_button.config(state='normal')    
+
+def convert_all_to_pdf(root_folder: Path):
+    pythoncom.CoInitialize()
+    word = win32com.client.Dispatch("Word.Application")
+    word.Visible = False
+    word.DisplayAlerts = False
+
+    converted, errors = [], []
+
+    try:
+        for docx_file in root_folder.rglob('*.docx'):
+            try:
+                doc = word.Documents.Open(str(docx_file))
+                pdf_path = docx_file.with_suffix('.pdf')
+                doc.SaveAs(str(pdf_path), FileFormat=17)  # wdFormatPDF
+                doc.Close()
+                converted.append(docx_file.name)
+            except Exception as e:
+                errors.append({'file': docx_file.name, 'error': str(e)})
+    finally:
+        word.Quit()
+        pythoncom.CoUninitialize()
+
+    return converted, errors
+
+def start_pdf_conversion():
+
+    if not documents_generated:
+        messagebox.showwarning('Error', 'Please generate the documents first')
+        return
+
+    output_dir = Path(path_output.get())
+
+    if not output_dir.exists():
+        messagebox.showwarning('Error', 'Please choose a valid output directory first')
+        return
+
+    docx_files = list(output_dir.rglob('*.docx'))
+    if not docx_files:
+        messagebox.showwarning('Error', 'No .docx files found in the output directory')
+        return
+
+    generate_button.config(state='disabled')
+    convert_button.config(state='disabled')
+    status_label.config(text=f'Converting {len(docx_files)} document(s) to PDF...', foreground='blue')
+    root.update()
+
+    try:
+        converted, pdf_errors = convert_all_to_pdf(output_dir)
+
+        if not pdf_errors:
+            status_label.config(text='All PDFs generated successfully!', foreground='green')
+            messagebox.showinfo('Success', f'Converted {len(converted)} document(s) to PDF.')
+        else:
+            status_label.config(text='PDF conversion completed with errors.', foreground='orange')
+            details = '\n'.join(f"{e['file']}: {e['error']}" for e in pdf_errors)
+            messagebox.showwarning('Completed with errors',
+                f'Converted: {len(converted)}\nFailed: {len(pdf_errors)}\n\n{details}')
+    except Exception as e:
+        status_label.config(text='PDF conversion failed.', foreground='red')
+        messagebox.showerror('Error', f'An unexpected error occurred:\n{str(e)}')
+    finally:
+        generate_button.config(state='normal')
+        convert_button.config(state='normal')
                
 root = tk.Tk()
 
@@ -266,6 +331,9 @@ status_label.pack(pady=5)
 
 generate_button = ttk.Button(progress_frame, text='Generate', command=start_generation_process)
 generate_button.pack(pady=10)
+
+convert_button = ttk.Button(progress_frame, text='Convert to PDF', command=start_pdf_conversion, state='disabled')
+convert_button.pack(pady=5)
 
 if (base_dir / 'AcceptanceLetterTemplate.docx').exists():
     path_acs.set(str(base_dir / "AcceptanceLetterTemplate.docx"))
