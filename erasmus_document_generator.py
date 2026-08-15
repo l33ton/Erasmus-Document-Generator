@@ -17,6 +17,7 @@ import pythoncom
 CURRENT_VERSION = 'v1.0.0'
 GITHUB_USERNAME = 'l33ton'
 GITHUB_REPO = 'Erasmus-Document-Generator'
+documents_generated = False
 
 def calculate_sha256(file_path):
     sha256_hash = hashlib.sha256()
@@ -120,7 +121,6 @@ def create_file_row(parent, row, label_text, var, browse_func):
     btn.grid(row=row, column=2, padx=5, pady=5)
 
 def start_generation_process():
-    global documents_generated
     nominations_path = Path(path_noms.get())
     output_dir = Path(path_output.get())
     acs_tpl_path = path_acs.get()
@@ -152,6 +152,7 @@ def start_generation_process():
         grant_agreement_template = LetterGenerator(ga_tpl_path, 'Grant Agreement')
 
         nominations_reader = pd.read_excel(nominations_path, sheet_name=0)
+        nominations_reader = nominations_reader.fillna('')
                    
         if 'StartDate' in nominations_reader:
             nominations_reader['StartDate'] = pd.to_datetime(nominations_reader['StartDate']).dt.strftime('%d.%m.%Y')
