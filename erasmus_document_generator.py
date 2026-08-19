@@ -12,12 +12,25 @@ import tkinter.ttk as ttk
 import hashlib
 import win32com.client
 import pythoncom
-
+import functools
+import threading
 
 CURRENT_VERSION = 'v1.0.0'
 GITHUB_USERNAME = 'l33ton'
 GITHUB_REPO = 'Erasmus-Document-Generator'
 documents_generated = False
+
+def run_in_thread(func):
+
+    @functools.wraps(func)  
+    def wrapper(*args, **kwargs):
+        thread = threading.Thread(
+            target=func, args=args, kwargs=kwargs, daemon=True
+        )
+        thread.start()
+        return thread
+    
+    return wrapper
 
 def calculate_sha256(file_path):
     sha256_hash = hashlib.sha256()
@@ -26,61 +39,93 @@ def calculate_sha256(file_path):
             sha256_hash.update(chunk)
     return sha256_hash.hexdigest()
 
+@run_in_thread
+def _download_and_install(download_url, checksum_url):
+  try:
+    root.after(
+        0,
+        lambda: status_label.config(
+            text='Installing the new version', foreground='#003399'
+        ),
+    )
+
+    temp_setup = Path(tempfile.gettempdir()) / 'Update_Setup.exe'
+    exe_data = requests.get(download_url, timeout=15).content
+    expected_hash = (
+        requests.get(checksum_url, timeout=10).text.strip().split()[0].lower()
+    )
+
+    with open(temp_setup, 'wb') as f:
+      f.write(exe_data)
+
+    actual_hash = calculate_sha256(temp_setup)
+
+    if actual_hash != expected_hash:
+      temp_setup.unlink(missing_ok=True)
+      root.after(
+          0,
+          lambda: messagebox.showerror(
+              'Security Error',
+              'The file failed verification and was not installed.',
+          ),
+      )
+      return
+
+    def finalize():
+      subprocess.Popen([str(temp_setup)])
+      root.destroy()
+      sys.exit()
+
+    root.after(0, finalize)
+
+  except Exception as e:
+    root.after(
+        0,
+        lambda: messagebox.showerror('Update Failed', f'Error downloading: {e}'),
+    )
+
+@run_in_thread
 def check_for_updates():
+  try:
+    api_url = f'https://api.github.com/repos/{GITHUB_USERNAME}/{GITHUB_REPO}/releases/latest'
+    response = requests.get(api_url, timeout=3)
 
-    try:
-        api_url = f'https://api.github.com/repos/{GITHUB_USERNAME}/{GITHUB_REPO}/releases/latest'
-        response = requests.get(api_url, timeout=3)
-        if response.status_code == 200:
-            latest_release = response.json()
-            latest_version = latest_release.get('tag_name')
+    if response.status_code == 200:
+      latest_release = response.json()
+      latest_version = latest_release.get('tag_name')
 
-            if latest_version != CURRENT_VERSION:
-                answer = messagebox.askyesno(
-                    'There is a new version',
-                    f'We found a new version {latest_version} you are using {CURRENT_VERSION}. \nDo you want to download it?')
-                
-                if answer:
-                    assets = latest_release.get('assets', [])
-                    download_url = None
-                    checksum_url = None
+      if latest_version != CURRENT_VERSION:
 
-                    for asset in assets:
-                        if asset['name'].endswith('.exe'):
-                            download_url = asset['browser_download_url']
-                        elif asset['name'].endswith('.sha256'):
-                            checksum_url = asset['browser_download_url']
+        def ask_user():
+          answer = messagebox.askyesno(
+              'There is a new version',
+              f'We found a new version {latest_version} (you are using'
+              f' {CURRENT_VERSION}).\nDo you want to download it?',
+          )
+          if answer:
+            assets = latest_release.get('assets', [])
+            download_url = next(
+                (a['browser_download_url'] for a in assets if a['name'].endswith('.exe')),
+                None,
+            )
+            checksum_url = next(
+                (a['browser_download_url'] for a in assets if a['name'].endswith('.sha256')),
+                None,
+            )
 
-                    if not download_url:
-                        messagebox.showwarning('Error', 'No .exe file was found in the latest version on GitHub.')
-                        return
-                    if not checksum_url:
-                        messagebox.showwarning('Error', 'Missing .sha256 checksum file for the update.')
-                        return
-                    status_label.config(text='Installing the new version', foreground='#003399')
-                    root.update()
+            if not download_url or not checksum_url:
+              messagebox.showwarning(
+                  'Error', 'Missing required update files on GitHub.'
+              )
+              return
 
-                    temp_setup = Path(tempfile.gettempdir()) / 'Update_Setup.exe'
-                    exe_data = requests.get(download_url, timeout=15).content
-                    expected_hash = requests.get(checksum_url, timeout=10).text.strip().split()[0].lower()  
-                          
-                    with open(temp_setup, "wb") as f:
-                        f.write(exe_data)
+            _download_and_install(download_url, checksum_url)
 
-                    actual_hash = calculate_sha256(temp_setup)
+        root.after(0, ask_user)
 
-                    if actual_hash != expected_hash:
-                        temp_setup.unlink(missing_ok=True)
-                        messagebox.showerror('Security Error', 'The file failed verification and was not installed.')
-                        return
-
-                    subprocess.Popen([str(temp_setup)])
-                    root.destroy()
-                    sys.exit()
-
-    except Exception as e:
-        print(f"Check for update failed: {e}")                
-
+  except Exception as e:
+    print(f'Check for updates failed: {e}')
+              
 if getattr(sys, 'frozen', False):
     base_dir = Path(sys.executable).parent
 else:
@@ -120,33 +165,32 @@ def create_file_row(parent, row, label_text, var, browse_func):
     btn = ttk.Button(parent, text='Browse', command=browse_func)
     btn.grid(row=row, column=2, padx=5, pady=5)
 
+@run_in_thread
 def start_generation_process():
+    global documents_generated
     nominations_path = Path(path_noms.get())
     output_dir = Path(path_output.get())
     acs_tpl_path = path_acs.get()
     acm_tpl_path = path_acm.get()
     ga_tpl_path = path_ga.get()
 
-
     if not nominations_path.is_file():
-        messagebox.showwarning('Error', 'Please choose a valid Excel file with nominations')
+        root.after(0, lambda: messagebox.showwarning('Error', 'Please choose a valid Excel file with nominations'))
         return
 
     if not output_dir.exists():
-        messagebox.showwarning('Error', 'Please choose a valid directory')
+        root.after(0, lambda: messagebox.showwarning('Error', 'Please choose a valid directory'))
         return
     
     if not (acs_tpl_path and acm_tpl_path and ga_tpl_path):
-        messagebox.showwarning('Error', 'Please provide all the 3 templates')
+        root.after(0, lambda: messagebox.showwarning('Error', 'Please provide all the 3 templates'))
         return
 
     generate_button.config(state='disabled')
     convert_button.config(state='disabled')
-    root.update()
-
+    
     try:
-        status_label.config(text='Loading the templates', foreground='blue')
-        root.update()
+        root.after(0, lambda: status_label.config(text='Loading the templates', foreground='blue'))
         acceptance_letter_template = LetterGenerator(acs_tpl_path, 'Acceptance Letter')
         accommodation_letter_template = LetterGenerator(acm_tpl_path, 'Accommodation Letter')
         grant_agreement_template = LetterGenerator(ga_tpl_path, 'Grant Agreement')
@@ -161,6 +205,7 @@ def start_generation_process():
 
         records = nominations_reader.to_dict(orient='records')
         total_participants = len(records)
+        root.after(0, lambda: progress_bar.config(maximum=total_participants, value=0))
         successfull = []
         failed = []
 
@@ -172,9 +217,8 @@ def start_generation_process():
             valid_country = sanitize_filename(country)
 
             try:                                 
-                status_label.config(text=f'Processing [{idx}/{total_participants}]: {valid_full_name} ({valid_country})')
-                root.update()
-
+                root.after(0, lambda: status_label.config(text=f'Processing [{idx}/{total_participants}]: {valid_full_name} ({valid_country})'))
+                
                 student_folder = output_dir / valid_country / valid_full_name
                 student_folder.mkdir(parents=True, exist_ok=True)
         
@@ -187,39 +231,41 @@ def start_generation_process():
             except Exception as e:                 
                  failed.append({'name': full_name, 'row': idx, 'error': str(e)})                                
                  continue
-            
+            finally:
+                root.after(0, lambda v=idx: progress_bar.config(value=v))     
         if successfull:
             documents_generated = True
-            convert_button.config(state='normal')    
+            root.after(0, lambda: convert_button.config(state='normal'))
 
         if not failed:
-            status_label.config(text='All documents generated successfully!', foreground='green')
-            messagebox.showinfo('Success', f'Done! Documents generated for {total_participants} participants.') 
+            root.after(0, lambda: status_label.config(text='All documents generated successfully!', foreground='green'))
+            root.after(0, lambda: messagebox.showinfo('Success', f'Done! Documents generated for {total_participants} participants.')) 
         else:
-            status_label.config(text='Documents generated with errors.', foreground='orange')
+            root.after(0, lambda: status_label.config(text='Documents generated with errors.', foreground='orange'))
             failed_details = '\n'.join(
             f"Row {item['row']}: {item['name']} - {item['error']}"
             for item in failed)
                                 
-            messagebox.showwarning('Completed with errors', f'Generated successfully: {len(successfull)}\n' f'Failed: {len(failed)}\n\n' f'Failed Participants: \n{failed_details}')                                
+            root.after(0, lambda: messagebox.showwarning('Completed with errors', f'Generated successfully: {len(successfull)}\n' f'Failed: {len(failed)}\n\n' f'Failed Participants: \n{failed_details}'))                                
             
     except Exception as e:
-        status_label.config(text='Error with processing!', foreground='red')
-        messagebox.showerror('Error', f'An unexpected error occurred:\n{str(e)}')
+        root.after(0, lambda: status_label.config(text='Error with processing!', foreground='red'))
+        root.after(0, lambda: messagebox.showerror('Error', f'An unexpected error occurred:\n{str(e)}'))
 
     finally:
-        generate_button.config(state='normal')    
+        root.after(0, lambda: generate_button.config(state='normal')) 
+        root.after(0, lambda: progress_bar.config(value=0))   
 
-def convert_all_to_pdf(root_folder: Path):
+def convert_all_to_pdf(root_folder: Path, progress_callback=None):
     pythoncom.CoInitialize()
     word = win32com.client.Dispatch("Word.Application")
     word.Visible = False
     word.DisplayAlerts = False
 
     converted, errors = [], []
-
+    docx_files = list(root_folder.rglob('*.docx'))
     try:
-        for docx_file in root_folder.rglob('*.docx'):
+        for idx, docx_file in enumerate(docx_files, 1):
             try:
                 doc = word.Documents.Open(str(docx_file))
                 pdf_path = docx_file.with_suffix('.pdf')
@@ -228,51 +274,63 @@ def convert_all_to_pdf(root_folder: Path):
                 converted.append(docx_file.name)
             except Exception as e:
                 errors.append({'file': docx_file.name, 'error': str(e)})
+            finally:
+                if progress_callback:
+                    progress_callback(idx)
     finally:
         word.Quit()
         pythoncom.CoUninitialize()
 
     return converted, errors
 
+@run_in_thread
 def start_pdf_conversion():
 
     if not documents_generated:
-        messagebox.showwarning('Error', 'Please generate the documents first')
+        root.after(0, lambda: messagebox.showwarning('Error', 'Please generate the documents first'))
         return
 
     output_dir = Path(path_output.get())
 
     if not output_dir.exists():
-        messagebox.showwarning('Error', 'Please choose a valid output directory first')
+        root.after(0, lambda: messagebox.showwarning('Error', 'Please choose a valid output directory first'))
         return
 
     docx_files = list(output_dir.rglob('*.docx'))
     if not docx_files:
-        messagebox.showwarning('Error', 'No .docx files found in the output directory')
+        root.after(0, lambda: messagebox.showwarning('Error', 'No .docx files found in the output directory'))
         return
 
-    generate_button.config(state='disabled')
-    convert_button.config(state='disabled')
-    status_label.config(text=f'Converting {len(docx_files)} document(s) to PDF...', foreground='blue')
-    root.update()
+    total_files = len(docx_files)
+    
+    root.after(0, lambda: progress_bar.config(maximum=total_files, value=0))
+    root.after(0, lambda: generate_button.config(state='disabled'))
+    root.after(0, lambda: convert_button.config(state='disabled'))
+    root.after(0, lambda: status_label.config(text=f'Converting {len(docx_files)} document(s) to PDF...', foreground='blue'))
+
+    def update_progress(current_val):
+        root.after(0, lambda v=current_val: progress_bar.config(value=v))
 
     try:
-        converted, pdf_errors = convert_all_to_pdf(output_dir)
+        converted, pdf_errors = convert_all_to_pdf(output_dir, progress_callback=update_progress)
 
         if not pdf_errors:
-            status_label.config(text='All PDFs generated successfully!', foreground='green')
-            messagebox.showinfo('Success', f'Converted {len(converted)} document(s) to PDF.')
+            root.after(0, lambda: status_label.config(text='All PDFs generated successfully!', foreground='green'))
+            root.after(0, lambda: messagebox.showinfo('Success', f'Converted {len(converted)} document(s) to PDF.'))
         else:
-            status_label.config(text='PDF conversion completed with errors.', foreground='orange')
+            root.after(0, lambda: status_label.config(text='PDF conversion completed with errors.', foreground='orange'))
             details = '\n'.join(f"{e['file']}: {e['error']}" for e in pdf_errors)
-            messagebox.showwarning('Completed with errors',
-                f'Converted: {len(converted)}\nFailed: {len(pdf_errors)}\n\n{details}')
+            root.after(0, lambda: messagebox.showwarning('Completed with errors',
+                f'Converted: {len(converted)}\nFailed: {len(pdf_errors)}\n\n{details}'))
+            
     except Exception as e:
-        status_label.config(text='PDF conversion failed.', foreground='red')
-        messagebox.showerror('Error', f'An unexpected error occurred:\n{str(e)}')
+        root.after(0, lambda: status_label.config(text='PDF conversion failed.', foreground='red'))
+        root.after(0, lambda: messagebox.showerror('Error', f'An unexpected error occurred:\n{str(e)}'))
+
     finally:
-        generate_button.config(state='normal')
-        convert_button.config(state='normal')
+        root.after(0, lambda: generate_button.config(state='normal'))
+        root.after(0, lambda: convert_button.config(state='normal'))
+        root.after(0, lambda: progress_bar.config(value=0))
                
 root = tk.Tk()
 
@@ -321,11 +379,12 @@ files_and_dirs.pack(fill='x', padx=15, pady=10)
 create_file_row(files_and_dirs, 0, 'Nominations', path_noms, lambda: select_file(path_noms, 'Choose Nominations', [("Excel", "*.xls *.xlsx")]))
 create_file_row(files_and_dirs, 1, 'Output Folder', path_output, lambda: select_folder(path_output, 'Choose Directory'))
 
-
-
 progress_frame = ttk.Labelframe(tab_main, text='Progress and Button')
 progress_frame.columnconfigure(1, weight=1)
 progress_frame.pack(fill='x', padx=15, pady=10)
+
+progress_bar = ttk.Progressbar(progress_frame, orient='horizontal', mode='determinate')
+progress_bar.pack(fill='x', padx=15, pady=5)
 
 status_label = ttk.Label(progress_frame, text='Ready to process..')
 status_label.pack(pady=5)
@@ -344,7 +403,6 @@ if (base_dir / 'GrantAgreementTemplate.docx').exists():
     path_ga.set(str(base_dir / "GrantAgreementTemplate.docx"))
 if (base_dir / 'Erasmus_Nominations_Data.xlsx').exists():
     path_noms.set(str(base_dir / "Erasmus_Nominations_Data.xlsx"))
-path_output.set(str(base_dir / 'generated_documents'))
 
 if __name__ == "__main__":
     root.after(1000, check_for_updates)
