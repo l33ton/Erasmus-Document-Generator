@@ -22,8 +22,8 @@ __pycache__/
 .pytest_cache/
 
 # Excel / Word temporary files
-~$*.xlsx
-~$*.docx
+*.xlsx
+*.docx
 
 # Environment & IDEs
 .venv/
