@@ -17,7 +17,7 @@ class ErasmusApp:
         self.root.geometry('600x500')
         self.root.title('Erasmus Document Generator')
 
-        # Променливи за пътищата
+        
         self.path_acs = tk.StringVar()
         self.path_acm = tk.StringVar()
         self.path_ga = tk.StringVar()
@@ -61,7 +61,7 @@ class ErasmusApp:
         self._create_file_row(files_frame, 0, 'Nominations', self.path_noms, lambda: self._select_file(self.path_noms, 'Choose Nominations', [("Excel", "*.xls *.xlsx")]))
         self._create_file_row(files_frame, 1, 'Output Folder', self.path_output, lambda: self._select_folder(self.path_output, 'Choose Directory'))
 
-        # Progress and Controls
+
         progress_frame = ttk.Labelframe(tab_main, text='Progress and Controls')
         progress_frame.pack(fill='x', padx=15, pady=10)
 
@@ -77,20 +77,20 @@ class ErasmusApp:
         self.convert_button = ttk.Button(progress_frame, text='Convert to PDF', command=self.start_pdf_conversion, state='disabled')
         self.convert_button.pack(pady=5)
 
-    def _create_file_row(self, parent, row, label_text, var, browse_func):
+    def create_file_row(self, parent, row, label_text, var, browse_func):
         ttk.Label(parent, text=label_text).grid(row=row, column=0, padx=5, pady=5, sticky='w')
         ttk.Entry(parent, textvariable=var).grid(row=row, column=1, padx=5, pady=5, sticky='ew')
         ttk.Button(parent, text='Browse', command=browse_func).grid(row=row, column=2, padx=5, pady=5)
 
-    def _select_file(self, target_var, title, file_types):
+    def select_file(self, target_var, title, file_types):
         path = filedialog.askopenfilename(title=title, filetypes=file_types)
         if path: target_var.set(path)
 
-    def _select_folder(self, target_var, title):
+    def select_folder(self, target_var, title):
         path = filedialog.askdirectory(title=title)
         if path: target_var.set(path)
 
-    def _load_defaults(self):
+    def load_defaults(self):
         if (self.base_dir / 'AcceptanceLetterTemplate.docx').exists():
             self.path_acs.set(str(self.base_dir / "AcceptanceLetterTemplate.docx"))
         if (self.base_dir / 'AccommodationLetterTemplate.docx').exists():
