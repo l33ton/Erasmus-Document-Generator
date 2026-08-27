@@ -27,7 +27,7 @@ class ErasmusApp:
         self._build_ui()
         self._load_defaults()
 
-    def _build_ui(self):
+    def build_ui(self):
         # Header
         header = tk.Frame(self.root, bg='#003399', bd=2, relief=tk.RIDGE)
         header.pack(fill='x', padx=20, pady=20)
@@ -61,7 +61,7 @@ class ErasmusApp:
         self.create_file_row(files_frame, 0, 'Nominations', self.path_noms, lambda: self._select_file(self.path_noms, 'Choose Nominations', [("Excel", "*.xls *.xlsx")]))
         self.create_file_row(files_frame, 1, 'Output Folder', self.path_output, lambda: self._select_folder(self.path_output, 'Choose Directory'))
 
-
+        # Progress Bar
         progress_frame = ttk.Labelframe(tab_main, text='Progress and Controls')
         progress_frame.pack(fill='x', padx=15, pady=10)
 
