@@ -29,7 +29,8 @@ def download_and_install(root, status_label, download_url, checksum_url):
         root.after(0, lambda: status_label.config(text='Installing the new version', foreground='#003399'))
         temp_setup = Path(tempfile.gettempdir()) / 'Update_Setup.exe'
         exe_data = requests.get(download_url, timeout=15).content
-        expected_hash = requests.get(checksum_url, timeout=10).text.strip().split()[0].lower()
+        raw_hash_text = requests.get(checksum_url, timeout=10).text.strip()
+        expected_hash = raw_hash_text.split()[0].lower().strip()
 
         with open(temp_setup, 'wb') as f:
             f.write(exe_data)
@@ -51,28 +52,49 @@ def download_and_install(root, status_label, download_url, checksum_url):
 
 @run_in_thread
 def check_for_updates(root, status_label, current_version, username, repo):
-    try:
-        api_url = f'https://api.github.com/repos/{username}/{repo}/releases/latest'
-        response = requests.get(api_url, timeout=3)
+  try:
+    api_url = (
+        f'https://api.github.com/repos/{username}/{repo}/releases/latest'
+    )
+    response = requests.get(api_url, timeout=3)
 
-        if response.status_code == 200:
-            latest_release = response.json()
-            latest_version = latest_release.get('tag_name')
+    if response.status_code == 200:
+      latest_release = response.json()
+      latest_version = latest_release.get('tag_name')
 
-            if latest_version != current_version:
-                def ask_user():
-                    answer = messagebox.askyesno(
-                        'New Version Available',
-                        f'Found version {latest_version} (current: {current_version}). Download?'
-                    )
-                    if answer:
-                        assets = latest_release.get('assets', [])
-                        dl_url = next((a['browser_download_url'] for a in assets if a['name'].endswith('.exe')), None)
-                        cs_url = next((a['browser_download_url'] for a in assets if a['name'].endswith('.sha256')), None)
+      if latest_version != current_version:
+        
+        assets = latest_release.get('assets', [])
+        dl_url = next(
+            (
+                a['browser_download_url']
+                for a in assets
+                if a['name'].endswith('.exe')
+            ),
+            None,
+        )
+        cs_url = next(
+            (
+                a['browser_download_url']
+                for a in assets
+                if a['name'].endswith('.sha256')
+            ),
+            None,
+        )
+        
+        if dl_url and cs_url:
 
-                        if dl_url and cs_url:
-                            download_and_install(root, status_label, dl_url, cs_url)
+          def ask_user():
+            answer = messagebox.askyesno(
+                'New Version Available',
+                f'Found version {latest_version} (current:'
+                f' {current_version}). Download?',
+            )
+            if answer:
+              download_and_install(root, status_label, dl_url, cs_url)
 
-                root.after(0, ask_user)
-    except Exception as e:
-        print(f'Check for updates failed: {e}')
+          
+          root.after(0, ask_user)
+  
+  except Exception as e:
+            print(f'Check for updates failed: {e}')

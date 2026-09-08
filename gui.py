@@ -24,8 +24,8 @@ class ErasmusApp:
         self.path_noms = tk.StringVar()
         self.path_output = tk.StringVar()
 
-        self._build_ui()
-        self._load_defaults()
+        self.build_ui()
+        self.load_defaults()
 
     def build_ui(self):
         # Header
@@ -49,17 +49,17 @@ class ErasmusApp:
         templates_frame.columnconfigure(1, weight=1)
         templates_frame.pack(fill='x', padx=15, pady=10)
 
-        self.create_file_row(templates_frame, 0, 'Acceptance Letter', self.path_acs, lambda: self._select_file(self.path_acs, 'Choose Acceptance Letter', [("Word", "*.docx")]))
-        self.create_file_row(templates_frame, 1, 'Accommodation Letter', self.path_acm, lambda: self._select_file(self.path_acm, 'Choose Accommodation Letter', [("Word", "*.docx")]))
-        self.create_file_row(templates_frame, 2, 'Grant Agreement', self.path_ga, lambda: self._select_file(self.path_ga, 'Choose Grant Agreement', [("Word", "*.docx")]))
+        self.create_file_row(templates_frame, 0, 'Acceptance Letter', self.path_acs, lambda: self.select_file(self.path_acs, 'Choose Acceptance Letter', [("Word", "*.docx")]))
+        self.create_file_row(templates_frame, 1, 'Accommodation Letter', self.path_acm, lambda: self.select_file(self.path_acm, 'Choose Accommodation Letter', [("Word", "*.docx")]))
+        self.create_file_row(templates_frame, 2, 'Grant Agreement', self.path_ga, lambda: self.select_file(self.path_ga, 'Choose Grant Agreement', [("Word", "*.docx")]))
 
         # Main Tab - Files & Dirs
         files_frame = ttk.Labelframe(tab_main, text='Files and Directories')
         files_frame.columnconfigure(1, weight=1)
         files_frame.pack(fill='x', padx=15, pady=10)
 
-        self.create_file_row(files_frame, 0, 'Nominations', self.path_noms, lambda: self._select_file(self.path_noms, 'Choose Nominations', [("Excel", "*.xls *.xlsx")]))
-        self.create_file_row(files_frame, 1, 'Output Folder', self.path_output, lambda: self._select_folder(self.path_output, 'Choose Directory'))
+        self.create_file_row(files_frame, 0, 'Nominations', self.path_noms, lambda: self.select_file(self.path_noms, 'Choose Nominations', [("Excel", "*.xls *.xlsx")]))
+        self.create_file_row(files_frame, 1, 'Output Folder', self.path_output, lambda: self.select_folder(self.path_output, 'Choose Directory'))
 
         # Progress Bar
         progress_frame = ttk.Labelframe(tab_main, text='Progress and Controls')
